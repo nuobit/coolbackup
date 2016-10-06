@@ -1,2 +1,2 @@
-include LICENSE MANIFEST.in
+include README.md LICENSE MANIFEST.in
 recursive-include config.samples *
