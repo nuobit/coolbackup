@@ -615,7 +615,7 @@ def save_imap_ssl_direct(host, remote_source_mailboxes, remote_dest_path, local_
                         log.debug("Copying recent local copy to current local copy %s" % base_dest_filename)
                         run("cp '%s' '%s'" % (local_past_day_dest_file, local_dest_file), 'local')
 
-                if os.path.exists(local_dest_file):
+                if local_past_day_dest_file == local_dest_file and os.path.exists(local_dest_file):
                     cmd = "cat '%s'" % local_dest_file
                     local_tmp_filename_tmp = '%s~' % base_filename
                     local_tmp_file_tmp = '%s/%s' % (local_dest_path, local_tmp_filename_tmp)
