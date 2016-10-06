@@ -33,7 +33,7 @@ class Bzip2Exception(Exception):
 
 
 def signal_term_handler(signal, frame):
-    raise SystemError("Killed by another coolbackup. No pot haver dos executant-se al mateix temps.")
+    raise SystemError("Killed by another coolbackup. Just one instance is able to run at the same time.")
 
 signal.signal(signal.SIGTERM, signal_term_handler)
 
@@ -105,7 +105,6 @@ class coolssh:
 
     def run(self, cmd, timeout=None):
         stdin, stdout, stderr = self.client.exec_command(cmd, get_pty=True)
-        #stdin.write("pepe")
         #stdin.channel.shutdown_write()
 
         out = stdout.read()
@@ -167,11 +166,11 @@ class sshTunnel():
     def __init__(self, host, user, privkey, local_port, remote_port,
                  remote_host='localhost', port=22,
                  sshStrictHostKeyChecking=True, UserKnownHostsFile=False, wait_time = 2):
-        # option -oUserKnownHostsFile=/dev/null perque no avisi si canvia la jey al cnavir el servidor
+        # option -oUserKnownHostsFile=/dev/null do not complain if the key changes
 
         port_forwarding_string = '%s:%s:%s' % (local_port, remote_host, remote_port)
 
-        # cerquem altres porcessos ssh usant el mateix port
+        # search for another ssh processes running with the same local port forwarding
         procs = []
         for proc in psutil.process_iter():
             try:
@@ -182,7 +181,7 @@ class sshTunnel():
             except psutil.NoSuchProcess:
                 pass
 
-        # matem els alytres porcesos assh que usen el amteix port
+        # kill the other ssh processes
         if procs!=[]:
             log.debug("S'han trobat %i processos ssh amb el port %i obert. matant-los..." % (len(procs), remote_port))
             def on_terminate(proc):
@@ -194,7 +193,7 @@ class sshTunnel():
             for p in alive:
                 p.kill()
 
-        # onbrim tunnel
+        # open tunnel
         sshTunnelCmd_l = []
         sshTunnelCmd_l.append("ssh -N -L %s -i %s" % (port_forwarding_string, privkey))
 
@@ -213,74 +212,15 @@ class sshTunnel():
     def kill(self):
         self.tunnel.kill()
 
-"""
-t = sshTunnel('hotel-sancarlos.com', 'turixpertsa', '~/.ssh/id_rsa', local_port=10993,
-              remote_port=993,
-              remote_host='mail.webfaction.com', sshStrictHostKeyChecking=False, wait_time=5)
-t.kill()
-exit()
-"""
+
 def get_pseudo_today():
     dt = datetime.datetime.now(tz=None)
     hour = int(dt.strftime('%H'))
-    if hour >= 0 and hour <= 6:  # es considera per la nit i es desa al cpia al dia anterior
+    if hour >= 0 and hour <= 6:  # before 6 is like the night of previous day
         dt = dt - datetime.timedelta(days=1)
 
     return dt
 
-def check_process0(file):
-    try:
-        with open(file, 'r') as f:
-            pid = int(f.read())
-        try:
-            os.kill(pid, signal.SIGTERM)  # signal.SIGKILL
-            log.debug("s'ha detectat un altre proces coolbackup amb pid %i. Matant proces...." % pid)
-            N = 10
-            for i in range(1, N+1):
-                try:
-                    os.kill(pid, 0)
-                except OSError:
-                    log.debug("Proces amb pid %i matat." % pid)
-                    break
-                time.sleep(1)
-                if i>= N:
-                    raise SystemError("No s'ha pogut matar el proces %i despres de %i segons" % N)
-        except ProcessLookupError as e:
-            pass
-
-    except FileNotFoundError:
-        pass
-
-    with open(file, 'w') as f:
-        f.write('%i' % os.getpid())
-
-
-def check_process1(file):
-    try:
-        with open(file, 'r') as f:
-            pid = int(f.read())
-
-        try:
-            procs = [psutil.Process(pid)]
-            log.debug("s'ha detectat un altre proces coolbackup amb pid %i. Matant proces...." % pid)
-
-            def on_terminate(proc):
-                log.debug("process {} terminated with exit code {}".format(proc, proc.returncode))
-
-            for p in procs:
-                p.terminate()
-            gone, alive = psutil.wait_procs(procs, timeout=3, callback=on_terminate)
-            for p in alive:
-                p.kill()
-
-        except psutil.NoSuchProcess as e:
-            pass
-
-    except FileNotFoundError:
-        pass
-
-    with open(file, 'w') as f:
-        f.write('%i' % os.getpid())
 
 def check_process():
     procs = []
@@ -293,7 +233,7 @@ def check_process():
 
     # matem els alytres porcesos assh que usen el amteix port
     if procs != []:
-        log.debug("S'han trobat altres %i processos obert. matant-los..." % len(procs))
+        log.debug("There's %i other processes running. Killing them all..." % len(procs))
 
         def on_terminate(proc):
             log.debug("process {} terminated with exit code {}".format(proc, proc.returncode))
@@ -368,13 +308,13 @@ def run(cmd, typ='remote', to_file=None, shell=False):
 
 def pipe2encrypt(cmd, dest_path, dest_filename, encrypt_passwd, typ):
     remote_dest_file = '%s/%s' % (dest_path, dest_filename)
-    log.debug("Comprimint i encriptant al fitxer '%s'..." % dest_filename)
+    log.debug("Compressing and encrypting to file '%s'..." % dest_filename)
     cmd = cmd + " | bzip2 -c -z -9 | openssl aes-256-cbc -k '%s' -out '%s'" % (encrypt_passwd, remote_dest_file)
     run(cmd, typ)
 
 
 def pipe2decrypt(cmd, dest_path_file, encrypt_passwd, typ):
-    log.debug("Desencriptant i descomprimint al fitxer '%s'..." % dest_path_file)
+    log.debug("Decrypting and uncompressing to file '%s'..." % dest_path_file)
     cmd = cmd + " | openssl aes-256-cbc -k '%s' -d | bzip2 -c -d" % encrypt_passwd
     with open(dest_path_file, 'wb') as f:
         try:
@@ -426,13 +366,13 @@ def compare_files(local_file, remote_file):
     if not file_exists(local_file, typ='local') or not file_exists(remote_file, typ='remote'):
         return False
 
-    log.debug("Generant SH512 del fitxer remot %s..." % remote_file)
+    log.debug("Generating SHA512 of remote file %s..." % remote_file)
     out, _ = run("sha512sum -b '%s'" % remote_file, 'remote')
     m = re.search(r'^([^*]+\*)', out)
     if m is None:
         raise Exception("Unexpected SHA format: %s" % out)
 
-    log.debug("Verificant SH512 del fitxer local %s..." % local_file)
+    log.debug("Verifying SHA512 of local file %s..." % local_file)
     sha512 = '%s%s' % (m.group(1), local_file)
     cmd = "echo '%s' | (LC_ALL=C sha512sum -c --status; echo $?)" % sha512
 
@@ -441,29 +381,14 @@ def compare_files(local_file, remote_file):
     return int(out) == 0
 
 
-#remote_server.connect('hotel-sancarlos.com', 'turixpertsa', key_file='/home/eantones/.ssh/id_rsa')
-
-#backup_base_folder = '/home/eantones/Documents/NuoBiT/dev/python/soft/coolbackup/test'
-#backup_filenames = ['coolbackup@1.gg', 'coolbackup@3.gg', 'coolbackup@gfgf (5a còpia).gg', 'coolbackup@gfgf (còpia).gg']
-#clean_dir(backup_base_folder, backup_filenames, 'local')
-
-#r = '/home/turixpertsa/backup/4/coolbackup@files.home.turixpertsa.webapps.elmaspla.tar.bz2.enc'
-#l = '/home/eantones/Documents/NuoBiT/dev/python/soft/coolbackup/bak1/turixpertsa/4/coolbackup@files.home.turixpertsa.webapps.elmaspla.tar.bz2.enc'
-
-#p = '/home/eantones/Documents/NuoBiT/dev/python/soft/coolbackup/test/coolbackup@1.gg'
-#p = '/home/turixpertsa/misc/database2.sql'
-#a=file_exists(p, 'local')
-#print(a)
-
-#exit()
 ###################################################
 
 def save_directory(remote_source_complex_path, remote_dest_path, local_dest_path, encrypt_passwd, infix=None):
     """
-        * Comprimir i encryptar
+        * Compress and encrypt
         $ tar cP <directory> | bzip2 -c -z -9 | openssl aes-256-cbc -k <password> -out <directory>.tar.bz2.enc
 
-        * Desencryptar, descomprimir
+        * Decrypt and decompress
         $ openssl aes-256-cbc -k <password> -d -in <directory>.tar.bz2.enc -out <directory>.tar.bz2
         o
         $ openssl aes-256-cbc -k <password> -d -in <directory>.tar.bz2.enc | bzip2 -c -d > <directory>.tar
@@ -474,7 +399,7 @@ def save_directory(remote_source_complex_path, remote_dest_path, local_dest_path
     backup_filenames = []
     if isinstance(remote_source_complex_path, dict):
         if len(remote_source_complex_path) != 1:
-            raise Exception("unexpected, el dict ha de ser de longm 1 %s" % remote_source_complex_path)
+            raise Exception("Unexpected, the dictionary must be of 1 element %s" % remote_source_complex_path)
         base_dir = list(remote_source_complex_path.keys())[0].rstrip('/')
         source_dir0 = list(remote_source_complex_path.values())[0]
         if source_dir0 != []:
@@ -487,7 +412,7 @@ def save_directory(remote_source_complex_path, remote_dest_path, local_dest_path
         remote_source_paths = [base_dir]
         base_filename0 = base_dir
     else:
-        raise Exception("tipus %s no tractat! %s" % (type(remote_source_complex_path), remote_source_complex_path))
+        raise Exception("Type %s unexpected! %s" % (type(remote_source_complex_path), remote_source_complex_path))
 
     if remote_source_paths != []:
         base_filename_parts = ['%sfiles' % PREFIX]
@@ -503,7 +428,7 @@ def save_directory(remote_source_complex_path, remote_dest_path, local_dest_path
 
         remote_dest_file = '%s/%s' % (remote_dest_path, base_dest_filename)
         local_dest_file = '%s/%s' % (local_dest_path, base_dest_filename)
-        log.debug("Descarregant el fitxer %s..." % base_dest_filename)
+        log.debug("Downloading file %s..." % base_dest_filename)
         remote_server.get(remote_dest_file, local_dest_file)
 
         backup_filenames.append(base_dest_filename)
@@ -513,11 +438,11 @@ def save_directory(remote_source_complex_path, remote_dest_path, local_dest_path
 
 def save_db(host, port, user, passwd, database, engine, remote_dest_path, local_dest_path, encrypt_passwd):
     """
-        * Comprimir i encryptar
+        * Compress and encrypt
         $ PGPASSWORD=<passwd> pg_dump --create --host localhost --port 5432 --username <username> --blobs <database_name> | bzip2 -c -z -9 | openssl aes-256-cbc -k <encrypt_passwd> -out <database_name>.sql.bz2.enc
         $ MYSQL_PWD=<passwd> mysqldump --host=localhost --port=5432 --user=<username> <database_name> | bzip2 -c -z -9 | openssl aes-256-cbc -k <encrypt_passwd> -out <database_name>.sql.bz2.enc
 
-        * Desencryptar i descomprimir
+        * Decrypt and decompress
         $ openssl aes-256-cbc -k <password> -d -in <database_name>.sql.bz2.enc | bzip2 -c -d > <database_name>.sql
     """
     backup_filenames = []
@@ -536,7 +461,7 @@ def save_db(host, port, user, passwd, database, engine, remote_dest_path, local_
 
     remote_dest_file = '%s/%s' % (remote_dest_path, base_dest_filename)
     local_dest_file = '%s/%s' % (local_dest_path, base_dest_filename)
-    log.debug("Descarregant el fitxer %s..." % base_dest_filename)
+    log.debug("Downloading file %s..." % base_dest_filename)
     remote_server.get(remote_dest_file, local_dest_file)
 
     backup_filenames.append(base_dest_filename)
@@ -546,14 +471,14 @@ def save_db(host, port, user, passwd, database, engine, remote_dest_path, local_
 def save_git_data(base_path, remote_dest_path, local_dest_path, encrypt_passwd):
     """ Desem les dades dels repostoris git existens per sota la carepta folder per si mes endavant volem restuarat una versio identica
 
-       * Comprimir i encryptar
+       * Compress and encrypt
        $ cat <directory>.txt | bzip2 -c -z -9 | openssl aes-256-cbc -k pepe -out <directory>.txt.bz2.enc
 
-       * Desencryptar i descomprimir
+       * Decrypt and decompress
        $ openssl aes-256-cbc -k <password> -d -in <directory>.txt.bz2.enc | bzip2 -c -d > <directory>.txt
     """
     backup_filenames = []
-    log.debug("Cercant repositoris GIT %s..." % (base_path,))
+    log.debug("Searching GIT repositories in %s..." % (base_path,))
     cmd = 'find %s -name ".git"' % base_path
     out, _ = run(cmd, 'remote')
 
@@ -565,7 +490,7 @@ def save_git_data(base_path, remote_dest_path, local_dest_path, encrypt_passwd):
         gits.append(m.group(1))
 
     #### Dades git del respository, branch, commit, etc..
-    log.debug("Cercant dades dels repositoris GIT %s..." % (base_path,))
+    log.debug("Searching GIT repository data %s..." % (base_path,))
     lines = []
     for git_base_folder in gits:
         git_branch, _ = run('cd %s && git rev-parse --abbrev-ref HEAD' % git_base_folder, 'remote')
@@ -580,13 +505,13 @@ def save_git_data(base_path, remote_dest_path, local_dest_path, encrypt_passwd):
 
     remote_dest_file = '%s/%s' % (remote_dest_path, base_dest_filename)
     local_dest_file = '%s/%s' % (local_dest_path, base_dest_filename)
-    log.debug("Descarregant el fitxer %s..." % base_dest_filename)
+    log.debug("Downloading file %s..." % base_dest_filename)
     remote_server.get(remote_dest_file, local_dest_file)
 
     backup_filenames.append(base_dest_filename)
 
-    log.debug("Cercant dades dels canvis locals en els repositoris GIT %s..." % (base_path,))
-    #### dades git dels fitxers modficsts en local
+    log.debug("Searching for local changes in GIT repositories %s..." % (base_path,))
+    #### GIT data of local changed files
     for git_base_folder in gits:
         git_mods, _ = run('cd %s; git ls-files --exclude-standard --modified --other' % git_base_folder, 'remote')
         if git_mods is not None:
@@ -595,12 +520,12 @@ def save_git_data(base_path, remote_dest_path, local_dest_path, encrypt_passwd):
     return backup_filenames
 
 def save_python_data(base_path, remote_dest_path, local_dest_path, encrypt_passwd):
-    """ Desem les dades dels paquets instaltas en el pythn envirnment deleccionat
+    """ Saving installed package data of the selected python virtual environment
 
-       * Comprimir i encryptar
+       * Compress and encrypt
        $ cat <directory>.txt | bzip2 -c -z -9 | openssl aes-256-cbc -k pepe -out <directory>.txt.bz2.enc
 
-       * Desencryptar i descomprimir
+       * Decrypt and decompress
        $ openssl aes-256-cbc -k <password> -d -in <directory>.txt.bz2.enc | bzip2 -c -d > <directory>.txt
     """
     backup_filenames = []
@@ -614,7 +539,7 @@ def save_python_data(base_path, remote_dest_path, local_dest_path, encrypt_passw
 
     remote_dest_file = '%s/%s' % (remote_dest_path, base_dest_filename)
     local_dest_file = '%s/%s' % (local_dest_path, base_dest_filename)
-    log.debug("Descarregant el fitxer %s..." % base_dest_filename)
+    log.debug("Downloading file %s..." % base_dest_filename)
 
     remote_server.get(remote_dest_file, local_dest_file)
 
@@ -626,10 +551,10 @@ def save_python_data(base_path, remote_dest_path, local_dest_path, encrypt_passw
 def save_imap_ssl(host, remote_source_mailboxes, remote_dest_path, local_dest_path,
                   remote_past_days_dest_paths, local_past_days_dest_paths, encrypt_passwd, tunnel=False):
     """
-        * Comprimir i encryptar
+        * Compress and encrypt
         $ cat <mailbox_filename>.db | bzip2 -c -z -9 | openssl aes-256-cbc -k pepe -out <mailbox_filename>.db.bz2.enc
 
-        * Desencryptar i descomprimir
+        * Decrypt and decompress
         $ openssl aes-256-cbc -k <password> -d -in <mailbox_filename>.db.bz2.enc | bzip2 -c -d > <output_file>
     """
     if not tunnel:
@@ -655,7 +580,7 @@ def save_imap_ssl_direct(host, remote_source_mailboxes, remote_dest_path, local_
     random.shuffle(remote_source_mailboxes1)
 
     for imap_user, imap_passwd in remote_source_mailboxes1:
-        log.debug("Copiant mailbox %s..." % imap_user)
+        log.debug("Copying mailbox %s..." % imap_user)
 
         base_filename = '%simap.%s.db' % (PREFIX, imap_user)
         hash_filename = '%s.sha512' % base_filename
@@ -669,25 +594,25 @@ def save_imap_ssl_direct(host, remote_source_mailboxes, remote_dest_path, local_
 
         local_tmp_file = '%s/%s' % (local_dest_path, base_filename)
         if os.path.exists(local_tmp_file):
-            log.debug("S'ha trobat una copia inclompleta %s s'utilizara com a base per permetre una copia incremental...." % base_filename)
+            log.debug("A partial copy has been found %s. It will be used to enable incremental copy...." % base_filename)
         else:
             for remote_past_days_dest_path, local_past_day_dest_path in zip(remote_past_days_dest_paths, local_past_days_dest_paths):
-                log.debug("Cercant copia mes recent en remot %s..." % remote_past_days_dest_path)
+                log.debug("Searching for a recent and complete remote copy %s. It will be used to enable incremental copy..." % remote_past_days_dest_path)
                 remote_past_day_dest_hash_file = '%s/%s' % (remote_past_days_dest_path, hash_filename)
                 remote_past_day_dest_file = '%s/%s' % (remote_past_days_dest_path, base_dest_filename)
                 if file_exists(remote_past_day_dest_hash_file, 'remote') and file_exists(remote_past_day_dest_file, 'remote'):
-                    log.debug("S'ha trobat una copia remota recent, %s." % remote_past_day_dest_file)
+                    log.debug("A recent completed remote copy has been found %s." % remote_past_day_dest_file)
                     if remote_past_days_dest_path != remote_dest_path:
-                        log.debug("Copiant copia recent a copia en curs %s" % base_dest_filename)
+                        log.debug("Copying recent remote copy to current remote copy %s" % base_dest_filename)
                         run("cp '%s' '%s'" % (remote_past_day_dest_file, remote_dest_file), 'remote')
                         run("cp '%s' '%s'" % (remote_past_day_dest_hash_file, remote_hash_file), 'remote')
 
-                log.debug("Cercant copia mes recent en local %s..." % local_past_day_dest_path)
+                log.debug("Searching for a recent and complete local copy %s. It will be used to enable incremental copy.." % local_past_day_dest_path)
                 local_past_day_dest_file = '%s/%s' % (local_past_day_dest_path, base_dest_filename)
                 if os.path.exists(local_past_day_dest_file):
-                    log.debug("S'ha trobat una copia local recent, %s s'utilizara com a base per permetre una copia incremental." % local_past_day_dest_file)
+                    log.debug("A recent completed local copy has been found %s." % local_past_day_dest_file)
                     if local_past_day_dest_file!=local_dest_file:
-                        log.debug("Copiant copia recent a copia en curs %s" % base_dest_filename)
+                        log.debug("Copying recent local copy to current local copy %s" % base_dest_filename)
                         run("cp '%s' '%s'" % (local_past_day_dest_file, local_dest_file), 'local')
 
                 if os.path.exists(local_dest_file):
@@ -699,7 +624,7 @@ def save_imap_ssl_direct(host, remote_source_mailboxes, remote_dest_path, local_
                         run("mv '%s' '%s'" % (local_tmp_file_tmp, local_tmp_file), 'local')
                         break
                     except Bzip2Exception:
-                        log.debug("La copia local trobada corrupte, no es pot fer copia incremental %s" % local_past_day_dest_file)
+                        log.debug("The local copy found is corrupted. The incremental copy cannot be done %s" % local_past_day_dest_file)
                         run("rm '%s'" % local_tmp_file_tmp, 'local')
                         run("rm '%s'" % local_dest_file, 'local')
                         run("rm -f '%s'" % local_hash_file, 'local')
@@ -709,36 +634,23 @@ def save_imap_ssl_direct(host, remote_source_mailboxes, remote_dest_path, local_
 
         sync = True
         if file_exists(remote_dest_file, 'remote') and file_exists(remote_hash_file, 'remote'):
-            log.debug("Comprovant hash sha512 entre fixter remot i local %s..." % base_filename)
+            log.debug("Verifying SHA512 hash between local and remote files %s..." % base_filename)
             cmd_tmpl = "cat '%s'"
             remote_hash, _ = run(cmd_tmpl % remote_hash_file, 'remote')
             local_hash, _ = run(cmd_tmpl % local_hash_file, 'local')
             sync = remote_hash != local_hash
 
         if sync:
-            log.debug("Els hashs NO coincideixen o el fiter no existeix a la destinacio, cal sincronitzar fitxers %s..." % base_dest_filename)
+            log.debug("The SHA512 hash are NOT the same o the file does not exists on destination. It's necessary to syncronize the files %s..." % base_dest_filename)
             cmd = "cat '%s'" % local_tmp_file
             pipe2encrypt(cmd, local_dest_path, base_dest_filename, encrypt_passwd, 'local')
-            log.debug("Pujant al servidor %s..." % base_dest_filename)
+            log.debug("Uploading to server %s..." % base_dest_filename)
             remote_server.put(local_dest_file, remote_dest_file)
             remote_server.put(local_hash_file, remote_hash_file)
         else:
-            log.debug("Els hashs coincideixen, no cal comprimir ni encryptar ni pujar res.")
+            log.debug("The SHA512 hash MATCHES. It's not necessary to compress, encrypt neither uploading anything.")
 
-        """
-        if local_changes > 0 or not file_exists(local_dest_file, 'local'):
-            cmd = 'cat %s' % local_tmp_file
-            pipe2encrypt(cmd, local_dest_path, base_dest_filename, encrypt_passwd, 'local')
-
-        remote_dest_file = '%s/%s' % (remote_dest_path, base_dest_filename)
-        if local_changes > 0 or not file_exists(remote_dest_file):
-            log.debug("Fitxer modificat o fitxer remot no existent, pujant al servidor %s..." % base_dest_filename)
-            remote_server.put(local_dest_file, remote_dest_file)
-        else:
-            log.debug("Fitxer no modificat i fitxer remote existent, no cal pujar al servidor %s..." % base_dest_filename)
-        """
-
-        log.debug("Eliminant fitxer temporal %s..." % base_filename)
+        log.debug("Removing temporary file %s..." % base_filename)
         run('rm %s' % local_tmp_file, 'local')
 
         backup_filenames.append(base_dest_filename)
@@ -748,7 +660,7 @@ def save_imap_ssl_direct(host, remote_source_mailboxes, remote_dest_path, local_
 
 def save_imap_ssl_tunnel(host, remote_source_mailboxes, remote_dest_path, local_dest_path,
                          remote_past_days_dest_paths, local_past_days_dest_paths, encrypt_passwd):
-    log.debug("Creant tunnel SSH...")
+    log.debug("Creating SSH tunnel...")
     tun = sshTunnel(remote_server.host, remote_server.username, remote_server.key_file, local_port=10993, remote_port=993,
                     remote_host=host, sshStrictHostKeyChecking=False, wait_time=5)
     try:
@@ -756,7 +668,7 @@ def save_imap_ssl_tunnel(host, remote_source_mailboxes, remote_dest_path, local_
                                     remote_past_days_dest_paths, local_past_days_dest_paths, encrypt_passwd, port=10993,
                                     check_from_hostname=False)
     finally:
-        log.debug("Destruint tunnel...")
+        log.debug("Destroying tunnel...")
         tun.kill()
 
 
@@ -764,7 +676,7 @@ def backup_server(config, remote_backup_base_folder, local_backup_base_folder, r
     backup_filenames = []
     ordered_services = order_by_priority(config.services)
     for service_name, params in ordered_services:
-        log.info("Iniciem la copia de %s..." % service_name)
+        log.info("Starting copy of %s..." % service_name)
         if params.type == 'imap':
             backup_filenames += save_imap_ssl(params.host, params.mailboxes,
                                               remote_backup_base_folder, local_backup_base_folder,
@@ -782,41 +694,29 @@ def backup_server(config, remote_backup_base_folder, local_backup_base_folder, r
             backup_filenames += save_git_data(params.path, remote_backup_base_folder, local_backup_base_folder, config.params.encrypt_passwd)
         elif params.type == 'pythondata':
             backup_filenames += save_python_data(params.path, remote_backup_base_folder, local_backup_base_folder, config.params.encrypt_passwd)
-        log.info("Fi de la copia de dades de %s." % service_name)
+        log.info("End of %s database copy." % service_name)
 
     return backup_filenames
 
 
 #TODO:
-# dear els imaps anivell de mailbox per accelrar el proces
-# desar el canvis que es fan ala db i pujar nomes els canivs al servidor
-#  fer hash dels fitxers local i remot i no pujar de nou e fitxer is son iguals (en els imap ja esta fet)
-# identacions en el log?
-# provar que es pugui desencryptarar i decomprimit tot
-# no esborrar els fitxers de la destinacio si son iguals als generats en local (en el imaps ja esat fet)
-# error quan la cntraenya es difernet en el restore_imap
-# psoar el tunnel amb paramiko
-# emails per si falla els disc smartctl
-# usaari difernte de webfaction per fer la copia
-# ecntyprartot el disc de afrodita o usar la rasp2 dedicada
-# crear hash del fitxxer abans de comprimir i encruptar i deixarlo en ,ocal i al sever per evitar upload o dewon (els ima ja estan fets)
-# monitoroitzar el log de quan s'activba el disc, que el fa activar a aprt de la copia?
-# conexio ssh aes256 i mac i tot al maxim
-# al fcomprimir fitxers i despres pujarlos usar el tee per dear a fitxer i a servirto al mteix temps
-# posar per separat cada conf pe
-# controlar que la desencriptacio en local del imaps nonshagi fet parical i doni error la descomprimir
-# usar rsync per copiar els fitxers
-# activar ao no que es deixi una copia en el servidor remot pel cas que nome svolgue teni rcopia local
-# perque e procesisn gmessages la suma del sKib a vegafes es difernte del que e descarega???
+# * Save only the local changes and send it only these to server.
+# * Sha512 of files too (imap is already done).
+# * LOG identations.
+# * Deal with error when encrypt passwords differs.
+# * Refactor ssh tunnel using Paramiko.
+# * Check ssh cipher params, improve security if it's possible an efficient.
+# * Using tee or similar to upload files to server and write to local filesystem if it's possible.
+# * Using rsync or similar to copy files.
+# * Allow user to choose if the copy is only locl or it leaves a copy in the server too.
+# * a lot of refactor and optimizations
 def main():
-    #script_path = os.path.dirname(__file__)
+    base_path = sys.argv[1]
 
-    script_path = sys.argv[1]
-
-    logger_path = '%s/logger.conf' % script_path
+    logger_path = '%s/logger.conf' % base_path
     with open(logger_path, 'r') as f:
         logger_conf = yaml.load(f)
-    logger_conf['handlers']['file_log']['filename'] = '%s/coolbackup.log' % script_path
+    logger_conf['handlers']['file_log']['filename'] = '%s/coolbackup.log' % base_path
     logging.config.dictConfig(logger_conf)
 
     check_process()
@@ -828,14 +728,14 @@ def main():
     for d in reversed(range(week_today, week_today + 7)):
         week_past_days.append((d - 1) % 7 + 1)
 
-    conf_path = '%s/servers.conf.d' % script_path
+    conf_path = '%s/servers.conf.d' % base_path
     for conf_filename in sorted(os.listdir(conf_path)):
         try:
             conf_file = '%s/%s' % (conf_path, conf_filename)
             with open(conf_file, 'r') as f:
                 config = AttrDict(yaml.load(f))
 
-            log.info("--------------- Inici de la copia de seguretat de %s del dia %i ------------------" % (config.params.username, week_today))
+            log.info("--------------- Start of backup %s day %i ------------------" % (config.params.username, week_today))
             if config.params.get('enabled', True):
                 local_backup_folder = '%s/%i' % (config.params.local_dest_path, week_today)
                 create_local_dir(local_backup_folder)
@@ -853,28 +753,28 @@ def main():
                     backup_filenames = backup_server(config, remote_backup_folder, local_backup_folder,
                                                      remote_backup_past_days_folders, local_backup_past_days_folders)
 
-                    log.info("Netejant fitxers obsolets...")
+                    log.info("Cleaning obsolete files...")
                     clean_dir(local_backup_folder, backup_filenames, 'local')
                     clean_dir(remote_backup_folder, backup_filenames, 'remote')
 
                     bc.end()
                 else:
-                    log.info("Copia del dia d'avui ja realitzada.")
+                    log.info("Today copy is already done.")
             else:
-                log.info("Copia deshabilitada.")
+                log.info("Copy disabled.")
 
-            log.info("--------------- Fi de la copia de seguretat de %s del dia %i <OK> ----------------" % (config.params.username, week_today))
+            log.info("--------------- End of backup %s dia %i <OK> ----------------" % (config.params.username, week_today))
         except (SystemError, KeyboardInterrupt) as e:
-            log.debug("Enviant e-mail d'error...")
-            log.exception("Error en fer la copia de seguretat de '%s'" % config.params.username)
-            log.debug("E-mail enviat.")
-            log.info("------------------- Fi de la copia de seguretat del dia %i <ERROR> ----------------------" % week_today)
+            log.debug("Sending error e-mail...")
+            log.exception("Error backing up '%s'" % config.params.username)
+            log.debug("E-mail sent.")
+            log.info("------------------- End of backup day %i <ERROR> ----------------------" % week_today)
             raise
         except:
-            log.debug("Enviant e-mail d'error...")
-            log.exception("Error en fer la copia de seguretat de '%s'" % config.params.username)
-            log.debug("E-mail enviat.")
-            log.info("------------------- Fi de la copia de seguretat del dia %i <ERROR> ----------------------" % week_today)
+            log.debug("Sending error e-mail...")
+            log.exception("Error backing up '%s'" % config.params.username)
+            log.debug("E-mail sent.")
+            log.info("------------------- End of backup day %i <ERROR> ----------------------" % week_today)
         finally:
             remote_server.close()
             logging.shutdown()
