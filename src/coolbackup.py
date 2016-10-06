@@ -596,7 +596,18 @@ def save_imap_ssl_direct(host, remote_source_mailboxes, remote_dest_path, local_
         if os.path.exists(local_tmp_file):
             log.debug("A partial copy has been found %s. It will be used to enable incremental copy...." % base_filename)
         else:
-            for remote_past_days_dest_path, local_past_day_dest_path in zip(remote_past_days_dest_paths, local_past_days_dest_paths):
+            for local_past_day_dest_path, remote_past_days_dest_path in zip(local_past_days_dest_paths, remote_past_days_dest_paths):
+                log.debug("Searching for a recent and complete local copy %s. It will be used to enable incremental copy.." % local_past_day_dest_path)
+                local_past_day_dest_file = '%s/%s' % (local_past_day_dest_path, base_dest_filename)
+                if os.path.exists(local_past_day_dest_file):
+                    log.debug("A recent completed local copy has been found %s." % local_past_day_dest_file)
+                    if local_past_day_dest_file!=local_dest_file:
+                        log.debug("Copying recent local copy to current local copy %s" % base_dest_filename)
+                        run("cp '%s' '%s'" % (local_past_day_dest_file, local_dest_file), 'local')
+                else:
+                    log.debug("Recent completed local copy not found %s." % local_past_day_dest_file)
+                    continue
+
                 log.debug("Searching for a recent and complete remote copy %s. It will be used to enable incremental copy..." % remote_past_days_dest_path)
                 remote_past_day_dest_hash_file = '%s/%s' % (remote_past_days_dest_path, hash_filename)
                 remote_past_day_dest_file = '%s/%s' % (remote_past_days_dest_path, base_dest_filename)
@@ -607,15 +618,7 @@ def save_imap_ssl_direct(host, remote_source_mailboxes, remote_dest_path, local_
                         run("cp '%s' '%s'" % (remote_past_day_dest_file, remote_dest_file), 'remote')
                         run("cp '%s' '%s'" % (remote_past_day_dest_hash_file, remote_hash_file), 'remote')
 
-                log.debug("Searching for a recent and complete local copy %s. It will be used to enable incremental copy.." % local_past_day_dest_path)
-                local_past_day_dest_file = '%s/%s' % (local_past_day_dest_path, base_dest_filename)
-                if os.path.exists(local_past_day_dest_file):
-                    log.debug("A recent completed local copy has been found %s." % local_past_day_dest_file)
-                    if local_past_day_dest_file!=local_dest_file:
-                        log.debug("Copying recent local copy to current local copy %s" % base_dest_filename)
-                        run("cp '%s' '%s'" % (local_past_day_dest_file, local_dest_file), 'local')
-
-                if local_past_day_dest_file == local_dest_file and os.path.exists(local_dest_file):
+                if os.path.exists(local_dest_file):
                     cmd = "cat '%s'" % local_dest_file
                     local_tmp_filename_tmp = '%s~' % base_filename
                     local_tmp_file_tmp = '%s/%s' % (local_dest_path, local_tmp_filename_tmp)
