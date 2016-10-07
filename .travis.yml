@@ -1,0 +1,19 @@
+language: python
+python:
+  - "3.5"
+
+script:
+  - touch foo
+
+deploy:
+  provider: pypi
+  server: https://testpypi.python.org/pypi
+  #distributions: sdist
+  user: eantones
+  password:
+    secure: "jzagZW++IIP9L0l1M2F9Y7hjZmWr/NsEGc6rW3r0jfrXkTvpRVBwlypmgU86Tv6Y5gTi4NNSof9iVH8z/pXwb6OqN398A87P4fZK6T2VTXkkA2qi/hfcOdAkNv+cjd/QNCLlQL6xgpgcLaLLojp2gJn8ju2cUBu36V8l3pqrUV4U+JvkTIsQ6TOhOUwPCy+XMEESHSES119ybWsNIBYulDmsMNYIwXajdYleEc05Q40WAlObWGmipGrN22Vkntb/hwGOlVrPMmpU2RH2OH+u+snDSftUvt5lv2iVgRBg+F9kFEtjSfzZXZ64EItucm2t5QjcygddtGGsVQffl30FGIwF7xBeIMmC5S7iNoey3wVi+d7wEzEBIoxWNxXv61kHtvJXfbt4GxWelHfsRcqc10phredAOzgwDGDApSV20vf0dVGbEhisb0KsumdkLPo6WoFyRoEqEV6PvXL1UGewcpbSCP/9UQahss8X+6GHZRS3iVBB7SFe/QHegyV4Axh6JDnRt8D230IFq/2IPg0gjiV3FNmBIiPpaOWT9UZ5OpGqXI26Re7KSUVn04jRGczwis+ELLoFYwctRO/nsSCEnSubyn9uJsDSCPRwUYTZ1tfnpkCzR9YPoMairrMKvntrgHQYC2h8nwt13ghbB/TMobRV4Ksl7r3/pD/PRPglPi4="
+  on:
+    #repo: nuobit/prova
+    tags: true
+    branch: master
+    #condition: $TRAVIS_PYTHON_VERSION = "3.5"
