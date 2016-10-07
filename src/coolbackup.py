@@ -702,17 +702,18 @@ def backup_server(config, remote_backup_base_folder, local_backup_base_folder, r
     return backup_filenames
 
 
-#TODO:
-# * Save only the local changes and send it only these to server.
-# * Sha512 of files too (imap is already done).
-# * LOG identations.
-# * Deal with error when encrypt passwords differs.
-# * Refactor ssh tunnel using Paramiko.
-# * Check ssh cipher params, improve security if it's possible an efficient.
-# * Using tee or similar to upload files to server and write to local filesystem if it's possible.
-# * Using rsync or similar to copy files.
-# * Allow user to choose if the copy is only locl or it leaves a copy in the server too.
-# * a lot of refactor and optimizations
+
+# TODO: Save only the local changes and send it only these to server.
+# TODO: Sha512 of files too (imap is already done).
+# TODO: LOG identations.
+# TODO: Deal with error when encrypt passwords differs.
+# TODO: Refactor ssh tunnel using Paramiko.
+# TODO: Check ssh cipher params, improve security if it's possible an efficient.
+# TODO: Using tee or similar to upload files to server and write to local filesystem if it's possible.
+# TODO: Using rsync or similar to copy files.
+# TODO: Allow user to choose if the copy is only locl or it leaves a copy in the server too.
+# TODO: A lot of refactor and optimizations.
+# TODO: Make remote copy optional
 def main():
     base_path = sys.argv[1]
 
